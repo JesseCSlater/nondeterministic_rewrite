@@ -149,11 +149,11 @@ theorem TExpr.select_past_join_left
   unfold TExpr.equals
   simp_rw [TExpr.eval]
   ext row
-  unfold Table.select
-  rw [Table.nat_join_count]
   by_cases row.cast_pred_union_left pred
   case neg neq =>
-    simp_all [Row.union_left, Row.union_right, Row.cast_pred_eq_pred_left]
+    simp_all only [Row.cast_pred_eq_pred_left, Table.select,
+      Multiset.mem_filter, and_false, not_false_eq_true,
+      Multiset.count_eq_zero_of_not_mem, Table.nat_join_count, zero_mul]
   case pos eq =>
-    simp_all [Row.union_left, Row.union_right, Row.cast_pred_eq_pred_left,
-      Table.nat_join_count]
+    simp_all only [Row.cast_pred_eq_pred_left, Table.select,
+      Multiset.count_filter_of_pos, Table.nat_join_count]

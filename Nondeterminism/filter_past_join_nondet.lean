@@ -155,7 +155,7 @@ theorem Multiset.product_count
 theorem Table.t_nat_join_count
   (ltable : Table lscma) (rtable : Table rscma)
   (row : Row (lscma ∪ rscma))
-  : (ltable.t_nat_join rtable |> List.count row) = ltable.count row.union_left * rtable.count row.union_right
+  : ((ltable.t_nat_join rtable) |> Multiset.count row) = (ltable |> Multiset.count row.union_left) * (rtable |> Multiset.count row.union_right)
   := by
   unfold t_nat_join
   simp only [← Multiset.coe_count, ← Multiset.map_coe, ← Multiset.filter_coe, ← Multiset.coe_product]
@@ -216,19 +216,16 @@ theorem NTExpr.select_past_join_left
     simp_all only [Table.mem_select_self, and_self]
   case right =>
     simp_all only [Table.mem_select_iff, Table.nat_join,
-      Table.mem_forget_order_iff, ← Multiset.coe_eq_coe]
+      Table.mem_forget_order_iff, ← Multiset.coe_eq_coe, ← Multiset.filter_coe]
+    rw [← unfiltered_table_paired] at *
+    clear unfiltered_table_paired table_filtered
     ext row
     by_cases row.cast_pred_union_left pred
     case neg neq =>
-      rw [← Multiset.filter_coe, ← unfiltered_table_paired,
-        Multiset.count_filter_of_neg neq]
-      simp_all only [Row.cast_pred_eq_pred_left, Multiset.coe_eq_coe,
-        Multiset.coe_count, Table.t_nat_join_count, mul_eq_zero]
-      rw [← Multiset.coe_count, ← Multiset.filter_coe]
-      exact Or.intro_left _ (Multiset.count_filter_of_neg neq)
+      simp_all only [Row.cast_pred_eq_pred_left, Table.t_nat_join_count,
+        ← Multiset.filter_coe, Multiset.mem_filter, Multiset.mem_coe,
+        and_false, not_false_eq_true, Multiset.count_eq_zero_of_not_mem, zero_mul]
     case pos eq =>
-      rw [← Multiset.filter_coe, ←unfiltered_table_paired,
-        Multiset.count_filter_of_pos eq]
-      simp_all only [Row.cast_pred_eq_pred_left, Multiset.coe_eq_coe,
-        Multiset.coe_count, Table.t_nat_join_count, decide_True,
-        List.count_filter]
+      simp_all only [Row.cast_pred_eq_pred_left, Table.t_nat_join_count,
+        ← Multiset.filter_coe, Multiset.count_filter_of_pos,
+        Multiset.count_filter_of_pos]
