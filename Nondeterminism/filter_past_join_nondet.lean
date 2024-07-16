@@ -1,4 +1,5 @@
-import Mathlib
+import Mathlib.Data.Finset.Lattice
+import Mathlib.Tactic
 
 abbrev Schema := Finset String
 
@@ -178,9 +179,11 @@ def NTExpr.eval : NTExpr scma → NTable scma
   | const ntable =>
     ntable
   | select expr pred =>
-    expr.eval |>.sup (Table.select · pred)
+    expr.eval
+    |>.sup (Table.select · pred)
   | nat_join lexpr rexpr =>
-    lexpr.eval ×ˢ rexpr.eval |>.sup (λ (ltable, rtable) => Table.nat_join ltable rtable)
+    lexpr.eval ×ˢ rexpr.eval
+    |>.sup (λ (ltable, rtable) => Table.nat_join ltable rtable)
 
 def NTExpr.rewrites_to
   (orig rewrite : NTExpr scma)
@@ -197,15 +200,12 @@ theorem NTExpr.select_past_join_left
   unfold NTExpr.rewrites_to
   simp_rw [NTExpr.eval]
   rw [Finset.subset_iff]
-  intro table table_elem
-  rw [Finset.mem_sup] at table_elem
-  rcases table_elem with ⟨unfiltered_table, unfiltered_table_elem, table_filtered⟩
-  rw [Finset.mem_sup] at unfiltered_table_elem
-  rcases unfiltered_table_elem with ⟨table_pair, table_pair_elem, unfiltered_table_paired⟩
-  rw [Finset.mem_product] at table_pair_elem
+  intro table elem
+  rw [Finset.mem_sup] at elem
+  rcases elem with ⟨unfiltered_table, elem, table_filtered⟩
+  rw [Finset.mem_sup] at elem
+  rcases elem with ⟨table_pair, elem, unfiltered_table_paired⟩
   rcases table_pair with ⟨left_table, right_table⟩
-  simp_all only
-  rcases table_pair_elem with ⟨left_elem, right_elem⟩
   rw [Finset.mem_sup]
   use (left_table.filter pred, right_table)
   simp_all only [Finset.mem_product, and_true]
@@ -215,14 +215,20 @@ theorem NTExpr.select_past_join_left
     use left_table
     simp_all only [Table.mem_select_self, and_self]
   case right =>
-    simp_all only [Table.mem_select_iff, Table.nat_join, Table.mem_forget_order_iff, ← Multiset.coe_eq_coe]
+    simp_all only [Table.mem_select_iff, Table.nat_join,
+      Table.mem_forget_order_iff, ← Multiset.coe_eq_coe]
     ext row
     by_cases row.cast_pred_union_left pred
     case neg neq =>
-      rw [← Multiset.filter_coe, ← unfiltered_table_paired, Multiset.count_filter_of_neg neq]
-      simp_all only [Row.cast_pred_eq_pred_left, Multiset.coe_eq_coe, Multiset.coe_count, Table.t_nat_join_count, mul_eq_zero]
+      rw [← Multiset.filter_coe, ← unfiltered_table_paired,
+        Multiset.count_filter_of_neg neq]
+      simp_all only [Row.cast_pred_eq_pred_left, Multiset.coe_eq_coe,
+        Multiset.coe_count, Table.t_nat_join_count, mul_eq_zero]
       rw [← Multiset.coe_count, ← Multiset.filter_coe]
       exact Or.intro_left _ (Multiset.count_filter_of_neg neq)
     case pos eq =>
-      rw [← Multiset.filter_coe, ←unfiltered_table_paired, Multiset.count_filter_of_pos eq]
-      simp_all only [Row.cast_pred_eq_pred_left, Multiset.coe_eq_coe, Multiset.coe_count, Table.t_nat_join_count, decide_True, List.count_filter]
+      rw [← Multiset.filter_coe, ←unfiltered_table_paired,
+        Multiset.count_filter_of_pos eq]
+      simp_all only [Row.cast_pred_eq_pred_left, Multiset.coe_eq_coe,
+        Multiset.coe_count, Table.t_nat_join_count, decide_True,
+        List.count_filter]

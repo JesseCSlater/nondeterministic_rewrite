@@ -1,4 +1,6 @@
-import Mathlib
+import Mathlib.Data.Finset.Basic
+import Mathlib.Data.Multiset.Bind
+import Mathlib.Tactic
 
 abbrev Schema := Finset String
 
@@ -153,4 +155,5 @@ theorem TExpr.select_past_join_left
   case neg neq =>
     simp_all [Row.union_left, Row.union_right, Row.cast_pred_eq_pred_left]
   case pos eq =>
-    simp_all [Row.union_left, Row.union_right, Row.cast_pred_eq_pred_left, Table.nat_join_count]
+    simp_all [Row.union_left, Row.union_right, Row.cast_pred_eq_pred_left,
+      Table.nat_join_count]
