@@ -148,6 +148,7 @@ theorem TExpr.select_past_join_left
   := by
   unfold TExpr.equals
   simp_rw [TExpr.eval]
+
   ext row
   by_cases row.cast_pred_union_left pred
   case neg neq =>

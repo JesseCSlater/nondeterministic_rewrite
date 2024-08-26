@@ -1,7 +1,24 @@
 import Mathlib.Data.Finset.Lattice
 import Mathlib.Tactic
+import Mathlib
 
 abbrev Schema := Finset String
+
+/-
+def Schema.tag
+  (scma : Schema) (tag : String)
+  : Schema
+  :=
+  let f : String ↪ String :=
+   {toFun := λ s => tag ++ "." ++ s,
+    inj' := by
+      unfold Function.Injective
+      intro s s' inj
+      rw [← String.toList_inj] at inj
+      aesop
+    }
+  scma.map f
+-/
 
 abbrev Row (scma : Schema) := (attr : String) → (attr ∈ scma) → Option Nat
 
@@ -11,12 +28,23 @@ abbrev NTable scma := Finset (Table scma)
 
 inductive NTExpr : (scma : Schema) → Type where
   | const :
-    (NTable scma) → NTExpr scma
-  | select :
+    NTable scma → NTExpr scma
+  --| limit : NTExpr scma → Nat → NTExpr scma
+  --| project : NTExpr scma → (scma' : Schema) → (scma' ⊆ scma) → NTExpr scma'
+  | filter :
     NTExpr scma → (pred : Row scma → Prop) → [DecidablePred pred] → NTExpr scma
+  --| rename : NTExpr scma → (f : String ↪ String) → NTExpr (scma.map f)
   | nat_join :
     NTExpr lscma → NTExpr rscma → NTExpr (lscma ∪ rscma)
-
+/-
+| prod :
+    NTExpr lscma → NTExpr rscma → NTExpr (lscma.tag "left" ∪ rscma.tag "right")
+  | join :
+    NTExpr lscma → NTExpr rscma
+    → (scma : Schema) → (scma ⊆ lscma)
+    → (f : String ↪ String) → ((scma.map f) ⊆ rscma)
+    → NTExpr (lscma.tag "left" ∪ (rscma \ scma.map f).tag "right")
+-/
 def Table.forget_order
   (table : Table scma)
   : NTable scma :=
@@ -37,31 +65,31 @@ theorem Table.mem_forget_order_iff
   simp_all only [forget_order, List.mem_toFinset, List.mem_permutations, Multiset.coe_eq_coe, List.perm_comm]
 end Table.forget_order
 
-abbrev Table.t_select
+abbrev Table.t_filter
   (table : Table scma) (pred : Row scma → Prop) [DecidablePred pred]
   : Table scma :=
   table.filter pred
 
-def Table.select
+def Table.n_filter
   (table : Table scma) (pred : Row scma → Prop) [DecidablePred pred]
   : NTable scma :=
-  table.t_select pred |> Table.forget_order
+  table.t_filter pred |> Table.forget_order
 
-section Table.select
-theorem Table.mem_select_self
+section Table.n_filter
+theorem Table.mem_n_filter_self
   (table : Table scma) (pred : Row scma → Prop) [DecidablePred pred]
-  : table.filter pred ∈ table.select pred
+  : table.filter pred ∈ table.n_filter pred
   := by
-  simp_all only [select, mem_forget_order_self]
+  simp_all only [n_filter, mem_forget_order_self]
 
 @[simp]
-theorem Table.mem_select_iff
+theorem Table.mem_n_filter_iff
   {table : Table scma} {pred : Row scma → Prop} [DecidablePred pred]
-  : table' ∈ table.select pred ↔ table'.Perm (table.filter pred)
+  : table' ∈ table.n_filter pred ↔ table'.Perm (table.filter pred)
   := by
-  unfold select forget_order
+  unfold n_filter forget_order
   simp only [List.mem_toFinset, List.mem_permutations]
-end Table.select
+end Table.n_filter
 
 def Row.nat_join
   (lrow : Row lscma) (rrow : Row rscma)
@@ -178,9 +206,9 @@ end Table.nat_join
 def NTExpr.eval : NTExpr scma → NTable scma
   | const ntable =>
     ntable
-  | select expr pred =>
+  | filter expr pred =>
     expr.eval
-    |>.sup (Table.select · pred)
+    |>.sup (Table.n_filter · pred)
   | nat_join lexpr rexpr =>
     lexpr.eval ×ˢ rexpr.eval
     |>.sup (λ (ltable, rtable) => Table.nat_join ltable rtable)
@@ -194,11 +222,12 @@ infix:0 " =>ᵣ " => NTExpr.rewrites_to
 theorem NTExpr.select_past_join_left
   (lexpr : NTExpr lscma) (rexpr : NTExpr rscma)
   (pred : (Row lscma → Prop)) [DecidablePred pred]
-  : nat_join (select lexpr pred) rexpr =>ᵣ
-    select (nat_join lexpr rexpr) (Row.cast_pred_union_left pred)
+  : nat_join (filter lexpr pred) rexpr =>ᵣ
+    filter (nat_join lexpr rexpr) (Row.cast_pred_union_left pred)
   := by
   unfold NTExpr.rewrites_to
   simp_rw [NTExpr.eval]
+
   rw [Finset.subset_iff]
   intro table elem
   rw [Finset.mem_sup] at elem
@@ -213,12 +242,13 @@ theorem NTExpr.select_past_join_left
   case left =>
     rw [Finset.mem_sup]
     use left_table
-    simp_all only [Table.mem_select_self, and_self]
+    simp_all only [Table.mem_n_filter_self, and_self]
   case right =>
-    simp_all only [Table.mem_select_iff, Table.nat_join,
+    simp_all only [Table.mem_n_filter_iff, Table.nat_join,
       Table.mem_forget_order_iff, ← Multiset.coe_eq_coe, ← Multiset.filter_coe]
     rw [← unfiltered_table_paired] at *
     clear unfiltered_table_paired table_filtered
+
     ext row
     by_cases row.cast_pred_union_left pred
     case neg neq =>
