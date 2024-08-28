@@ -8,30 +8,58 @@ abbrev Table n := List (Row n)
 
 structure NTable (n : Nat) where
   s : Set (Table n)
-  t : Table n
-  mem : t ∈ s
+  w : Table n
+  mem : w ∈ s
 
 def NTable.bind
-  (t : NTable n) (f : Table n → NTable m)
+  (nt : NTable n) (f : Table n → NTable m)
   : NTable m where
-  s := ⋃₀ ((fun t ↦  (f t).s) '' t.s)
-  t := (f t.t).t
+  s := ⋃ t ∈ nt.s, (f t).s
+  w := (f nt.w).w
   mem := by
     simp_all only [Set.sUnion_image, Set.mem_iUnion, exists_prop]
-    use t.t
-    exact ⟨t.mem, (f t.t).mem⟩
-infix:67 ">>=" => NTable.bind
+    use nt.w
+    exact ⟨nt.mem, (f nt.w).mem⟩
+infix:67 " >>= " => NTable.bind
 
 def NTable.bind₂
-  (l : NTable ln) (r : NTable rn) (f : Table ln → Table rn → NTable m)
+  (ntl : NTable ln) (ntr : NTable rn) (f : Table ln → Table rn → NTable m)
   : NTable m where
-  s := ⋃₀ ((fun (lt, rt) ↦  (f lt rt).s) '' l.s ×ˢ r.s)
-  t := (f l.t r.t).t
+  s := ⋃ lt ∈ ntl.s, ⋃ rt ∈ ntr.s, (f lt rt).s
+  w := (f ntl.w ntr.w).w
   mem := by 
-    simp_all
-    use l.t
-    use r.t
-    exact ⟨⟨l.mem, r.mem⟩, (f l.t r.t).mem⟩
+    simp_all only [Set.mem_iUnion, exists_prop]
+    use ntl.w
+    refine ⟨ntl.mem, ?_⟩
+    use ntr.w
+    refine ⟨ntr.mem, ?_⟩
+    exact (f ntl.w ntr.w).mem
+
+inductive RowExpr : (n : Nat) → Type where
+  | const : 
+    Row n → RowExpr n
+
+inductive ValExpr where
+  | const : 
+    Nat → ValExpr
+  | access : 
+    RowExpr n → Fin n → ValExpr
+
+inductive PredExpr where
+  | const : 
+    Prop → PredExpr
+  | and : 
+    PredExpr → PredExpr → PredExpr
+  | or : 
+    PredExpr → PredExpr → PredExpr
+  | not :
+    PredExpr → PredExpr
+  | eq : 
+    ValExpr → ValExpr → PredExpr
+  | neq : 
+    ValExpr → ValExpr → PredExpr
+  | lt : 
+    ValExpr → ValExpr → PredExpr
 
 inductive NTExpr : (n : Nat) → Type where
   | const :
@@ -54,7 +82,7 @@ def Table.n_filter
   (table : Table n) (pred : Row n → Prop) [DecidablePred pred]
   : NTable n where
   s := {table.t_filter pred}
-  t := table.t_filter pred
+  w := table.t_filter pred
   mem := by rfl
 
 def Table.t_project
@@ -66,7 +94,7 @@ def Table.n_project
   (table : Table n) (f : Fin m ↪ Fin n)
   : NTable m where
   s := {table.t_project f}
-  t := table.t_project f
+  w := table.t_project f
   mem := by rfl
 
 def Table.t_prod
@@ -79,15 +107,16 @@ def Table.n_prod
   (ltable : Table l) (rtable : Table r)
   : NTable (l + r) where
   s := {Table.t_prod ltable rtable}
-  t := Table.t_prod ltable rtable
+  w := Table.t_prod ltable rtable
   mem := by rfl
 
-def Table.sort
-  (table : Table n) (rel : Row n → Row n → Prop) (trans : Transitive rel) (total : Total rel) [DecidableRel rel]
+def Table.n_sort
+  (table : Table n) (rel : Row n → Row n → Prop) 
+  (trans : Transitive rel) (total : Total rel) [DecidableRel rel]
   : NTable n where
-  s := λ t => List.Pairwise rel t
-  t := table.insertionSort rel
-  mem := by
+  s := fun t ↦  table.Perm t ∧ List.Pairwise rel t
+  w := table.insertionSort rel
+  mem := by --long proof
     have is_pairwise : List.Pairwise rel (List.insertionSort rel table) := by 
       induction table with 
       | nil => simp_all only [List.insertionSort, List.Pairwise.nil]
@@ -149,8 +178,20 @@ def Table.sort
             apply trans total
             rw [List.pairwise_cons] at head_pairwise
             exact head_pairwise.left row' h
-    exact is_pairwise
+    exact ⟨List.Perm.symm (List.perm_insertionSort rel table), is_pairwise⟩
 
+theorem Table.n_sort_eq_sort_perm
+  (table table' : Table n) (rel : Row n → Row n → Prop) (trans : Transitive rel) (total : Total rel) [DecidableRel rel] (perm : table.Perm table')
+  : (table.n_sort rel trans total).s = (table'.n_sort rel trans total).s
+  := by
+  unfold n_sort
+  simp only
+  ext t
+  constructor
+  <;> rintro ⟨perm', pairwise⟩ 
+  <;> refine ⟨List.Perm.trans ?_ perm', pairwise⟩
+  · exact List.Perm.symm perm
+  · exact perm
 
 def NTExpr.eval : NTExpr scma → NTable scma
   | const ntable =>
@@ -162,11 +203,32 @@ def NTExpr.eval : NTExpr scma → NTable scma
   | prod lexpr rexpr =>
     NTable.bind₂ lexpr.eval rexpr.eval Table.n_prod
   | sort expr rel transitive total =>
-    expr.eval >>= (Table.sort · rel transitive total)
+    expr.eval >>= (Table.n_sort · rel transitive total)
 
-
-abbrev NTExpr.rewrites_to
+def NTExpr.rewrites_to
   (orig rewrite : NTExpr scma)
   : Prop
   := rewrite.eval.s ⊆ orig.eval.s
 infix:0 " =>ᵣ " => NTExpr.rewrites_to
+
+theorem remove_redundant_sort
+  (input : NTExpr n) (rel rel' : Row n → Row n → Prop) (trans : Transitive rel) (trans' : Transitive rel') (total : Total rel) (total' : Total rel') [DecidableRel rel] [DecidableRel rel']
+  : NTExpr.sort input rel' trans' total' |>.sort rel trans total =>ᵣ NTExpr.sort input rel trans total
+  := by
+  unfold NTExpr.rewrites_to
+  simp_rw [NTExpr.eval, NTable.bind]
+  simp_all only [Set.mem_iUnion, exists_prop, Set.iUnion_exists, Set.biUnion_and', Set.iUnion_subset_iff]
+  intro table mem
+  apply subset_trans ?_ (Set.subset_biUnion_of_mem mem)
+  apply subset_trans ?_ (Set.subset_biUnion_of_mem (table.n_sort rel' trans' total').mem)
+  unfold Table.n_sort
+  simp only
+  rintro table' ⟨perm, sorted⟩  
+  exact ⟨List.Perm.trans (List.perm_insertionSort rel' table) perm, sorted⟩ 
+
+
+
+
+
+
+
